@@ -22,7 +22,7 @@
   let recStartTime  = null;
 
   // ── Map Objects ───────────────────────────────────────────
-  let map, crosshairMarker, trackLine, accuracyCircle;
+  let map, crosshairMarker, trackLine, accuracyCircle, compassControl;
   let mapInitialized = false;
 
   // ── SVG Icons ─────────────────────────────────────────────
@@ -86,12 +86,54 @@
     // Add default base layer
     osmStandard.addTo(map);
 
+    // ── Compass Control ──────────────────────────────────────
+    const CompassControl = L.Control.extend({
+      options: { position: 'topleft' },
+
+      onAdd() {
+        const container = L.DomUtil.create('div', 'leaflet-compass-control');
+        container.innerHTML = `
+          <div class="compass-rose">
+            <svg class="compass-svg" viewBox="0 0 80 80" width="72" height="72">
+              <circle cx="40" cy="40" r="37" fill="none" stroke="var(--border)" stroke-width="1.5"/>
+              <line x1="40" y1="4"  x2="40" y2="12" stroke="var(--text-secondary)" stroke-width="1.5"/>
+              <line x1="40" y1="68" x2="40" y2="76" stroke="var(--text-secondary)" stroke-width="1.5"/>
+              <line x1="4"  y1="40" x2="12" y2="40" stroke="var(--text-secondary)" stroke-width="1.5"/>
+              <line x1="68" y1="40" x2="76" y2="40" stroke="var(--text-secondary)" stroke-width="1.5"/>
+              <line x1="14.1" y1="14.1" x2="19.8" y2="19.8" stroke="var(--border)" stroke-width="1"/>
+              <line x1="60.2" y1="60.2" x2="65.9" y2="65.9" stroke="var(--border)" stroke-width="1"/>
+              <line x1="65.9" y1="14.1" x2="60.2" y2="19.8" stroke="var(--border)" stroke-width="1"/>
+              <line x1="19.8" y1="60.2" x2="14.1" y2="65.9" stroke="var(--border)" stroke-width="1"/>
+              <text x="40" y="10"  text-anchor="middle" class="compass-label" fill="var(--danger)">N</text>
+              <text x="40" y="74"  text-anchor="middle" class="compass-label" fill="var(--text-secondary)">S</text>
+              <text x="76" y="44"  text-anchor="middle" class="compass-label" fill="var(--text-secondary)">E</text>
+              <text x="4"  y="44"  text-anchor="middle" class="compass-label" fill="var(--text-secondary)">W</text>
+              <g class="compass-needle-group">
+                <polygon points="40,10 36,40 40,36 44,40" fill="var(--danger)" opacity="0.95"/>
+                <polygon points="40,70 36,40 40,44 44,40" fill="var(--text-secondary)" opacity="0.5"/>
+                <circle cx="40" cy="40" r="3.5" fill="var(--bg-secondary)" stroke="var(--border)" stroke-width="1"/>
+              </g>
+            </svg>
+          </div>
+          <div class="compass-readout">
+            <span class="compass-deg">—°</span>
+            <span class="compass-dir">—</span>
+          </div>
+        `;
+        L.DomEvent.disableClickPropagation(container);
+        return container;
+      },
+    });
+
+    compassControl = new CompassControl();
+    compassControl.addTo(map);
+
     // ── Layer Control ────────────────────────────────────────
     const baseLayers = {
       '🗺 OpenStreetMap':   osmStandard,
       '🏔 OpenTopoMap':     openTopoMap,
-      '🥾 Stadia Outdoors': stadiaOutdoors,
-      '🛰 Satellite':       stadiaSatellite,
+      // '🥾 Stadia Outdoors': stadiaOutdoors,
+      // '🛰 Satellite':       stadiaSatellite,
     };
 
     const overlayLayers = {
@@ -178,6 +220,9 @@
     // Update info dashboard
     updateInfoPanel({ lat, lon, alt, acc, speed, heading });
 
+    // Update compass rose
+    updateCompass(heading);
+
     // Record data point when active
     if (isRecording && !isPaused) {
       if (lastGoodPos && acc < 50) {
@@ -227,6 +272,28 @@
     if (h == null) return '—';
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     return Math.round(h) + '° ' + dirs[Math.round(h / 45) % 8];
+  }
+
+  function updateCompass(heading) {
+    if (!compassControl) return;
+    const container = compassControl.getContainer();
+    if (!container) return;
+    const needleGroup = container.querySelector('.compass-needle-group');
+    const degEl       = container.querySelector('.compass-deg');
+    const dirEl       = container.querySelector('.compass-dir');
+    if (heading == null) {
+      degEl.textContent = '—°';
+      dirEl.textContent = '—';
+      return;
+    }
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    const dir  = dirs[Math.round(heading / 22.5) % 16];
+    degEl.textContent = Math.round(heading) + '°';
+    dirEl.textContent = dir;
+    if (needleGroup) {
+      needleGroup.style.transformOrigin = '40px 40px';
+      needleGroup.style.transform       = `rotate(${heading}deg)`;
+    }
   }
 
   function fmtDuration(ms) {
