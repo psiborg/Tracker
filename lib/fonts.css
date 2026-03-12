@@ -1,0 +1,44 @@
+/* ── Local Fonts ────────────────────────────────────────────
+   Replaces Google Fonts CDN link.
+   Served from: fonts/
+   ─────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style:  normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/rajdhani-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style:  normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/rajdhani-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style:  normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/rajdhani-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style:  normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/rajdhani-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  font-style:  normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/share-tech-mono-latin-400-normal.woff2') format('woff2');
+}
