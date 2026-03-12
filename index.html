@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tracker">
+  <meta name="theme-color" content="#0d1117">
+  <title>Tracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%230d1117' rx='24'/%3E%3Ccircle cx='96' cy='96' r='30' fill='none' stroke='%2339d353' stroke-width='10'/%3E%3Ccircle cx='96' cy='96' r='10' fill='%2339d353'/%3E%3Cline x1='96' y1='20' x2='96' y2='55' stroke='%2339d353' stroke-width='8' stroke-linecap='round'/%3E%3Cline x1='96' y1='137' x2='96' y2='172' stroke='%2339d353' stroke-width='8' stroke-linecap='round'/%3E%3Cline x1='20' y1='96' x2='55' y2='96' stroke='%2339d353' stroke-width='8' stroke-linecap='round'/%3E%3Cline x1='137' y1='96' x2='172' y2='96' stroke='%2339d353' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <div id="app-title"><span class="dot"></span>TRACKER</div>
+    <button id="menu-btn" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <!-- DROPDOWN MENU -->
+  <div id="dropdown">
+    <div class="menu-item" id="theme-toggle">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      Switch to Light Theme
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="about-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      About
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="gps-pill">
+      <span class="pill-dot"></span>
+      <span id="gps-status">ACQUIRING GPS</span>
+    </div>
+    <div id="rec-indicator">
+      <span class="rec-dot"></span>
+      <span id="rec-label">REC</span>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <button class="tb-btn start" id="btn-start">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+      Start
+    </button>
+    <button class="tb-btn pause" id="btn-pause" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+      </svg>
+      Pause
+    </button>
+    <button class="tb-btn stop" id="btn-stop" disabled>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+      Stop
+    </button>
+    <button class="tb-btn history" id="btn-history">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="12 8 12 12 14 14"/>
+        <path d="M3.05 11a9 9 0 1 1 .5 4M3 16V11H8"/>
+      </svg>
+      History
+    </button>
+  </div>
+
+  <!-- INFO PANEL -->
+  <div id="info-panel">
+    <div class="info-card">
+      <div class="info-label">Date</div>
+      <div class="info-value" id="val-date">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Time</div>
+      <div class="info-value accent" id="val-time">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Latitude</div>
+      <div class="info-value" id="val-lat">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Longitude</div>
+      <div class="info-value" id="val-lon">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Speed</div>
+      <div class="info-value" id="val-speed">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Accuracy</div>
+      <div class="info-value" id="val-acc">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Distance</div>
+      <div class="info-value accent" id="val-dist">0.00 km</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Altitude</div>
+      <div class="info-value" id="val-alt">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Heading</div>
+      <div class="info-value" id="val-heading">—</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Map Zoom</div>
+      <div class="info-value" id="val-zoom">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- NAME MODAL -->
+<div class="modal-overlay" id="name-modal">
+  <div class="modal-box" style="max-width:340px">
+    <div class="modal-header">
+      <span class="modal-title">Save Activity</span>
+      <button class="modal-close" id="name-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-prompt">Enter a name for this activity:</div>
+      <input type="text" id="activity-name-input" placeholder="e.g. Morning Hike" maxlength="60">
+      <div class="modal-actions">
+        <button class="btn-secondary" id="name-discard">Discard</button>
+        <button class="btn-primary" id="name-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY MODAL -->
+<div class="modal-overlay" id="history-modal">
+  <div class="modal-box" style="max-width:600px;max-height:80dvh;">
+    <div class="modal-header">
+      <span class="modal-title">Activity History</span>
+      <button class="modal-close" id="history-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="history-list"></div>
+      <div id="history-detail">
+        <div class="detail-empty">Select an activity</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ABOUT MODAL -->
+<div class="modal-overlay" id="about-modal">
+  <div class="modal-box" style="max-width:340px">
+    <div class="modal-header">
+      <span class="modal-title">About</span>
+      <button class="modal-close" id="about-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="about-logo">TRACKER</div>
+      <div class="about-version">v1.0.0 · GPS Activity Tracker</div>
+      <div class="about-desc">
+        A progressive web app for recording hiking and outdoor activities with real-time GPS
+        tracking, route visualization, and activity history.<br><br>
+        Works offline after first load. Install to home screen for the full native experience
+        on iOS and Android.<br><br>
+        Built with Leaflet.js + OpenStreetMap.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
