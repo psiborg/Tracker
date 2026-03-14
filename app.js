@@ -346,7 +346,6 @@
     // Update GPS pill
     $('gps-pill').classList.add('active');
     $('gps-status').textContent = 'GPS LOCK';
-    console.log('[TRACKER] onPosition fired, isRecording:', isRecording, 'isPaused:', isPaused);
 
     // First fix — initialise map
     if (!mapInitialized) initMap(lat, lon);
@@ -382,7 +381,6 @@
 
       // Always record the raw point (jitter filter only affects distance + line)
       currentPoints.push({ lat, lon, alt, acc, speed, heading, ts });
-      console.log('[TRACKER] point pushed, total:', currentPoints.length, 'acc:', acc, 'accFilter:', settings.accFilter);
 
       if (settings.smoothLines) {
         // Smooth track using Exponential Moving Average
@@ -577,7 +575,6 @@
   function saveActivity() {
     const name = $('activity-name-input').value.trim() || 'Unnamed Activity';
 
-    console.log('[TRACKER] saveActivity called, currentPoints.length:', currentPoints.length);
     // Snapshot points array by value so later resets don't affect the saved record
     const record = {
       id:       String(Date.now()),
@@ -592,7 +589,6 @@
       const activities = JSON.parse(storage.get('tracker_activities') || '[]');
       activities.unshift(record);
       storage.set('tracker_activities', JSON.stringify(activities));
-      console.log('[TRACKER] saved ok, record.points.length:', record.points.length, 'id:', record.id);
     } catch (err) {
       // Storage quota exceeded — try saving without older activities
       console.warn('localStorage full, saving only latest activity:', err);
@@ -631,28 +627,59 @@
 
     if (activities.length === 0) {
       list.innerHTML = '<div class="history-empty">No activities yet</div>';
+      $('history-detail').innerHTML = '<div class="detail-empty">Select an activity</div>';
       return;
     }
 
     list.innerHTML = activities.map(a => `
       <div class="history-item" data-id="${a.id}">
-        <div class="history-item-name">${escHtml(a.name)}</div>
-        <div class="history-item-meta">${a.date} · ${a.distance.toFixed(2)}km · ${fmtDuration(a.duration)}</div>
+        <div class="history-item-body">
+          <div class="history-item-name">${escHtml(a.name)}</div>
+          <div class="history-item-meta">${a.date} · ${a.distance.toFixed(2)}km · ${fmtDuration(a.duration)}</div>
+        </div>
+        <button class="history-delete-btn" data-id="${a.id}" aria-label="Delete activity">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
     `).join('');
 
     list.querySelectorAll('.history-item').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        // Don't select if the delete button was clicked
+        if (e.target.closest('.history-delete-btn')) return;
         list.querySelectorAll('.history-item').forEach(x => x.classList.remove('selected'));
         el.classList.add('selected');
         showActivityDetail(el.dataset.id, activities);
       });
     });
+
+    list.querySelectorAll('.history-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteActivity(btn.dataset.id);
+      });
+    });
+  }
+
+  function deleteActivity(id) {
+    let activities = JSON.parse(storage.get('tracker_activities') || '[]');
+    activities = activities.filter(a => String(a.id) !== String(id));
+    storage.set('tracker_activities', JSON.stringify(activities));
+
+    // If the deleted activity was selected, clear the detail pane
+    const detail = $('history-detail');
+    const selectedEl = $('history-list').querySelector('.history-item.selected');
+    if (selectedEl && selectedEl.dataset.id === String(id)) {
+      detail.innerHTML = '<div class="detail-empty">Select an activity</div>';
+    }
+
+    renderHistoryList();
   }
 
   function showActivityDetail(id, activities) {
     const a      = activities.find(x => String(x.id) === String(id));
-    console.log('[TRACKER] showActivityDetail id:', id, 'found:', !!a, a ? 'points:' + a.points?.length : '');
     const detail = $('history-detail');
     if (!a) return;
 

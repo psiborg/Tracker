@@ -608,7 +608,10 @@ body {
 }
 
 .history-item {
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 10px 14px;
   cursor: pointer;
   border-left: 3px solid transparent;
   transition: all 0.15s;
@@ -618,6 +621,11 @@ body {
 .history-item.selected {
   background: var(--accent-glow);
   border-left-color: var(--accent);
+}
+
+.history-item-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .history-item-name {
@@ -634,6 +642,36 @@ body {
   color: var(--text-secondary);
   margin-top: 2px;
   font-family: 'Share Tech Mono', monospace;
+}
+
+.history-delete-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.history-item:hover .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  background: rgba(248, 81, 73, 0.12);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.history-delete-btn:active {
+  transform: scale(0.9);
 }
 
 #history-detail {
