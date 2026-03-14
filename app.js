@@ -21,16 +21,18 @@
   let watchId       = null;
   let clockInterval = null;
   let recStartTime  = null;
-  let deviceHeading = null;   // compass heading from Device Orientation API (fallback)
+  let deviceHeading    = null;   // compass heading from Device Orientation API (fallback)
+  let lastRecordedTs   = 0;      // timestamp of the last recorded point (throttle)
 
   // ── Settings State ────────────────────────────────────────
   const SETTINGS_KEY = 'tracker_settings';
 
   const SETTINGS_DEFAULTS = {
-    smoothLines:  true,
-    jitterFilter: 0.003,   // km (3 m)
-    gpsInterval:  1000,    // ms
-    accFilter:    50,      // m
+    smoothLines:   true,
+    jitterFilter:  0.003,  // km (3 m)
+    gpsInterval:   1000,   // ms — watchPosition maximumAge
+    pointInterval: 5000,   // ms — minimum gap between recorded points (5 s default)
+    accFilter:     50,     // m
   };
 
   // Load persisted settings, falling back to defaults for any missing key
@@ -69,8 +71,9 @@
   };
 
   // ── Map Objects ───────────────────────────────────────────
-  let map, crosshairMarker, trackLine, accuracyCircle, compassControl;
+  let map, crosshairMarker, trackLine, accuracyCircle, compassControl, layerControl;
   let mapInitialized = false;
+  const activityLayers = {};   // id → L.Polyline, kept in sync with saved activities
   let userPanned     = false;   // true when user has manually moved the map
 
   // ── SVG Icons ─────────────────────────────────────────────
@@ -189,7 +192,10 @@
       '🚴 Cycling Routes': waymarkedCycling,
     };
 
-    L.control.layers(baseLayers, overlayLayers, { position: 'topright', collapsed: true }).addTo(map);
+    layerControl = L.control.layers(baseLayers, overlayLayers, { position: 'topright', collapsed: true }).addTo(map);
+
+    // Add overlay layers for any activities already in storage
+    loadActivityLayers();
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
@@ -379,8 +385,24 @@
       }
       if (acc < settings.accFilter) lastGoodPos = { lat, lon };
 
-      // Always record the raw point (jitter filter only affects distance + line)
-      currentPoints.push({ lat, lon, alt, acc, speed, heading, ts });
+      // Throttle: only record a point if enough time has elapsed
+      if (ts - lastRecordedTs >= settings.pointInterval) {
+        lastRecordedTs = ts;
+
+        // Compact format: short keys + reduced precision + omit nulls
+        // saves ~70% storage vs full JSON  (lat/lon 5dp ≈ 1m accuracy)
+        const pt = {
+          a: parseFloat(lat.toFixed(5)),
+          o: parseFloat(lon.toFixed(5)),
+          t: ts,
+        };
+        if (alt   != null) pt.l = Math.round(alt);
+        if (acc   != null) pt.c = parseFloat(acc.toFixed(1));
+        if (speed != null) pt.s = parseFloat((speed * 3.6).toFixed(1)); // store as km/h
+        if (heading != null) pt.h = Math.round(heading);
+
+        currentPoints.push(pt);
+      }
 
       if (settings.smoothLines) {
         // Smooth track using Exponential Moving Average
@@ -529,6 +551,7 @@
       smoothedPoints = [];
       totalDistance  = 0;
       lastGoodPos    = null;
+      lastRecordedTs = 0;
       recStartTime   = Date.now();
 
       if (trackLine) trackLine.setLatLngs([]);
@@ -572,6 +595,64 @@
     setTimeout(() => $('activity-name-input').focus(), 100);
   }
 
+  // ── Activity Path Layers ─────────────────────────────────
+
+  // Cycle through these colours so multiple activities are visually distinct
+  const LAYER_COLOURS = [
+    '#58a6ff', '#f78166', '#d2a8ff', '#ffa657',
+    '#79c0ff', '#ff7b72', '#a5d6ff', '#56d364',
+  ];
+
+  function pointsToLatLngs(points) {
+    return points
+      .map(p => {
+        const lat = p.a ?? p.lat;
+        const lon = p.o ?? p.lon;
+        return (lat != null && lon != null) ? [lat, lon] : null;
+      })
+      .filter(Boolean);
+  }
+
+  function loadActivityLayers() {
+    if (!layerControl) return;
+    const activities = JSON.parse(storage.get('tracker_activities') || '[]');
+    activities.forEach((a, idx) => addActivityLayer(a, idx));
+  }
+
+  function addActivityLayer(activity, colourIndex) {
+    if (!layerControl || !map) return;
+    if (activityLayers[activity.id]) return;   // already added
+
+    const latlngs = pointsToLatLngs(activity.points || []);
+    if (latlngs.length < 2) return;
+
+    const colour = LAYER_COLOURS[colourIndex % LAYER_COLOURS.length];
+    const line = L.polyline(latlngs, {
+      color:        colour,
+      weight:       3,
+      opacity:      0.75,
+      smoothFactor: 2,
+      lineJoin:     'round',
+      lineCap:      'round',
+    });
+
+    // Truncate long names so the layer control stays tidy
+    const label = activity.name.length > 22
+      ? activity.name.slice(0, 20) + '…'
+      : activity.name;
+
+    layerControl.addOverlay(line, `📍 ${label}`);
+    activityLayers[activity.id] = line;
+  }
+
+  function removeActivityLayer(id) {
+    const line = activityLayers[id];
+    if (!line) return;
+    if (map.hasLayer(line)) map.removeLayer(line);
+    layerControl.removeLayer(line);
+    delete activityLayers[id];
+  }
+
   function saveActivity() {
     const name = $('activity-name-input').value.trim() || 'Unnamed Activity';
 
@@ -589,6 +670,8 @@
       const activities = JSON.parse(storage.get('tracker_activities') || '[]');
       activities.unshift(record);
       storage.set('tracker_activities', JSON.stringify(activities));
+      // Add the saved path as an overlay layer on the map
+      addActivityLayer(record, activities.length - 1);
     } catch (err) {
       // Storage quota exceeded — try saving without older activities
       console.warn('localStorage full, saving only latest activity:', err);
@@ -667,6 +750,7 @@
     let activities = JSON.parse(storage.get('tracker_activities') || '[]');
     activities = activities.filter(a => String(a.id) !== String(id));
     storage.set('tracker_activities', JSON.stringify(activities));
+    removeActivityLayer(id);
 
     // If the deleted activity was selected, clear the detail pane
     const detail = $('history-detail');
@@ -688,17 +772,29 @@
       return;
     }
 
-    detail.innerHTML = a.points.map((p, i) => `
+    detail.innerHTML = a.points.map((p, i) => {
+      // Support both compact keys (a/o/t/l/c/s/h) and legacy full keys
+      const lat   = p.a   ?? p.lat;
+      const lon   = p.o   ?? p.lon;
+      const ts    = p.t   ?? p.ts;
+      const alt   = p.l   ?? p.alt;
+      const acc   = p.c   ?? p.acc;
+      // compact speed is already km/h; legacy speed is m/s
+      const spd   = p.s   != null ? p.s
+                  : p.speed != null ? parseFloat((p.speed * 3.6).toFixed(1))
+                  : null;
+      const hdg   = p.h   ?? p.heading;
+      return `
       <div class="detail-point">
         <span class="dp-idx">#${String(i + 1).padStart(3, '0')}</span>
-        &nbsp;${new Date(p.ts).toTimeString().slice(0, 8)}<br>
-        LAT ${p.lat  != null ? p.lat.toFixed(6)          : '—'} &nbsp;
-        LON ${p.lon  != null ? p.lon.toFixed(6)          : '—'}<br>
-        ALT ${p.alt  != null ? Math.round(p.alt) + 'm'  : '—'} &nbsp;
-        ACC ${p.acc  != null ? p.acc.toFixed(1) + 'm'   : '—'} &nbsp;
-        SPD ${p.speed!= null ? (p.speed * 3.6).toFixed(1) + 'km/h' : '—'}
-      </div>
-    `).join('');
+        &nbsp;${new Date(ts).toTimeString().slice(0, 8)}<br>
+        LAT ${lat != null ? lat.toFixed(5) : '—'} &nbsp;
+        LON ${lon != null ? lon.toFixed(5) : '—'}<br>
+        ALT ${alt != null ? alt + 'm'      : '—'} &nbsp;
+        ACC ${acc != null ? acc + 'm'      : '—'} &nbsp;
+        SPD ${spd != null ? spd + 'km/h'   : '—'}
+      </div>`;
+    }).join('');
   }
 
   $('btn-history').addEventListener('click', openHistory);
@@ -736,6 +832,7 @@
     $('setting-smooth').checked              = settings.smoothLines;
     $('setting-jitter').value                = jitterMetres;
     $('jitter-value-label').textContent      = jitterMetres + ' m';
+    $('setting-point-interval').value        = String(settings.pointInterval);
     $('setting-gps-interval').value          = String(settings.gpsInterval);
     $('setting-acc-filter').value            = String(settings.accFilter);
     $('jitter-row').classList.toggle('disabled', !settings.smoothLines);
@@ -763,6 +860,12 @@
     const metres = parseInt(this.value, 10);
     settings.jitterFilter = metres / 1000;
     $('jitter-value-label').textContent = metres + ' m';
+    saveSettings();
+  });
+
+  // Point record interval
+  $('setting-point-interval').addEventListener('change', function() {
+    settings.pointInterval = parseInt(this.value, 10);
     saveSettings();
   });
 

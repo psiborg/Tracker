@@ -239,8 +239,22 @@
 
         <div class="settings-row">
           <div class="settings-info">
-            <div class="settings-row-label">GPS Interval</div>
-            <div class="settings-row-desc">Maximum age of cached GPS position (lower = more frequent)</div>
+            <div class="settings-row-label">Record Interval</div>
+            <div class="settings-row-desc">How often a point is saved. Lower = more detail, more storage</div>
+          </div>
+          <select id="setting-point-interval" class="settings-select">
+            <option value="1000">1 s</option>
+            <option value="2000">2 s</option>
+            <option value="5000" selected>5 s</option>
+            <option value="10000">10 s</option>
+            <option value="30000">30 s</option>
+          </select>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">GPS Poll Rate</div>
+            <div class="settings-row-desc">How often the GPS hardware is queried</div>
           </div>
           <select id="setting-gps-interval" class="settings-select">
             <option value="500">0.5 s</option>
