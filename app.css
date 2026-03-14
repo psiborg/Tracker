@@ -736,13 +736,45 @@ body {
   font-family: 'Share Tech Mono', monospace;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 20px;
+  margin-bottom: 4px;
+}
+
+.about-cache {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  margin-bottom: 18px;
+  min-height: 14px;
 }
 
 .about-desc {
   font-size: 15px;
   line-height: 1.6;
   color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--info);
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+  letter-spacing: 0.3px;
+}
+
+.about-link:hover {
+  border-color: var(--info);
+  background: rgba(88, 166, 255, 0.08);
+  color: var(--info);
 }
 
 /* ── Compass Control ───────────────────────────────────── */

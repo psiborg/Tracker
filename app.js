@@ -183,8 +183,8 @@
     const baseLayers = {
       '🗺 OpenStreetMap':   osmStandard,
       '🏔 OpenTopoMap':     openTopoMap,
-      '🥾 Stadia Outdoors': stadiaOutdoors,
-      '🛰 Satellite':       stadiaSatellite,
+      // '🥾 Stadia Outdoors': stadiaOutdoors,
+      // '🛰 Satellite':       stadiaSatellite,
     };
 
     const overlayLayers = {
@@ -892,6 +892,15 @@
 
   // ── About Modal ───────────────────────────────────────────
   $('about-btn').addEventListener('click', () => {
+    // Populate the cache version from the active service worker's cache list
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        const trackerCache = keys.find(k => k.startsWith('tracker-v'));
+        if (trackerCache) {
+          $('about-cache').textContent = 'Cache: ' + trackerCache;
+        }
+      }).catch(() => {});
+    }
     $('about-modal').classList.add('open');
     closeMenu();
   });
