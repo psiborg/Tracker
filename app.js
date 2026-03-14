@@ -16,14 +16,62 @@
   let currentPoints = [];   // raw GPS points
   let smoothedPoints= [];   // EMA-smoothed for polyline
   let totalDistance = 0;
-  let lastGoodPos   = null;
+  let lastGoodPos   = null;   // filtered pos for distance calc (acc < 50 m)
+  let lastPos       = null;   // always-updated latest GPS fix
   let watchId       = null;
   let clockInterval = null;
   let recStartTime  = null;
+  let deviceHeading = null;   // compass heading from Device Orientation API (fallback)
+
+  // ── Settings State ────────────────────────────────────────
+  const SETTINGS_KEY = 'tracker_settings';
+
+  const SETTINGS_DEFAULTS = {
+    smoothLines:  true,
+    jitterFilter: 0.003,   // km (3 m)
+    gpsInterval:  1000,    // ms
+    accFilter:    50,      // m
+  };
+
+  // Load persisted settings, falling back to defaults for any missing key
+  function loadSettings() {
+    try {
+      const saved = JSON.parse(storage.get(SETTINGS_KEY) || '{}');
+      return Object.assign({}, SETTINGS_DEFAULTS, saved);
+    } catch (e) {
+      return Object.assign({}, SETTINGS_DEFAULTS);
+    }
+  }
+
+  function saveSettings() {
+    try {
+      storage.set(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn('Could not persist settings:', e);
+    }
+  }
+
+  // Apply loaded values to the settings object (mutable so other code can read it)
+  const settings = loadSettings();
+
+  // ── Storage Abstraction ──────────────────────────────────
+  // On file:// localStorage may be blocked; fall back to in-memory store.
+  const _memStore = {};
+  const storage = {
+    get(key) {
+      try { return localStorage.getItem(key); }
+      catch(e) { return _memStore[key] ?? null; }
+    },
+    set(key, val) {
+      try { localStorage.setItem(key, val); }
+      catch(e) { _memStore[key] = val; }
+    },
+  };
 
   // ── Map Objects ───────────────────────────────────────────
   let map, crosshairMarker, trackLine, accuracyCircle, compassControl;
   let mapInitialized = false;
+  let userPanned     = false;   // true when user has manually moved the map
 
   // ── SVG Icons ─────────────────────────────────────────────
   const SVG_SUN  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -132,8 +180,8 @@
     const baseLayers = {
       '🗺 OpenStreetMap':   osmStandard,
       '🏔 OpenTopoMap':     openTopoMap,
-      // '🥾 Stadia Outdoors': stadiaOutdoors,
-      // '🛰 Satellite':       stadiaSatellite,
+      '🥾 Stadia Outdoors': stadiaOutdoors,
+      '🛰 Satellite':       stadiaSatellite,
     };
 
     const overlayLayers = {
@@ -184,20 +232,110 @@
     map.on('zoomend', () => { $('val-zoom').textContent = map.getZoom(); });
     $('val-zoom').textContent = map.getZoom();
 
+    // Detect user-initiated pan or zoom; show Re-center button
+    let _recentering = false;  // true while we are programmatically re-centering
+    function onUserMove() {
+      if (_recentering) return;
+      userPanned = true;
+      $('recenter-btn').classList.add('visible');
+    }
+    map.on('dragstart', onUserMove);
+    map.on('zoomstart', onUserMove);
+
+    // Clear _recentering flag once the programmatic pan/zoom has settled
+    map.on('moveend', () => { _recentering = false; });
+
+    // Re-center button — snap back to current GPS location and resume following
+    $('recenter-btn').addEventListener('click', () => {
+      if (!lastPos) return;
+      _recentering = true;
+      userPanned   = false;
+      $('recenter-btn').classList.remove('visible');
+      map.setView([lastPos.lat, lastPos.lon], map.getZoom(), { animate: true });
+    });
+
     mapInitialized = true;
   }
 
   // ── GPS ───────────────────────────────────────────────────
   function startGPS() {
-    if (!navigator.geolocation) {
-      $('gps-status').textContent = 'NO GPS';
+    const isFileProtocol = location.protocol === 'file:';
+
+    if (!navigator.geolocation || isFileProtocol) {
+      $('gps-status').textContent = isFileProtocol ? 'MOCK GPS' : 'NO GPS';
+      if (isFileProtocol) startMockGPS();
       return;
     }
+
+    // Use watchPosition for real GPS devices (mobile).
+    // On desktop Chrome, watchPosition only fires once (no GPS hardware),
+    // so we also poll with getCurrentPosition every second as a fallback.
     watchId = navigator.geolocation.watchPosition(
       onPosition,
       onGPSError,
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
+
+    // Polling fallback — fires getCurrentPosition every 1 s.
+    // onPosition deduplicates by timestamp, so double-fires are harmless.
+    let lastPostedTs = 0;
+    const _wrappedOnPosition = (pos) => {
+      if (pos.timestamp !== lastPostedTs) {
+        lastPostedTs = pos.timestamp;
+        onPosition(pos);
+      }
+    };
+    const pollId = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        _wrappedOnPosition,
+        () => {},   // ignore poll errors silently
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      );
+    }, 1000);
+
+    // Store pollId so we can cancel it if needed
+    window._gpsPollId = pollId;
+  }
+
+  // ── Mock GPS (file:// testing only) ──────────────────────
+  // Simulates a walk around a city block near Toronto starting point
+  function startMockGPS() {
+    const MOCK_START = { lat: 43.6532, lon: -79.3832 };
+    const STEP = 0.00008;   // ~8 m per tick
+    let mockLat = MOCK_START.lat;
+    let mockLon = MOCK_START.lon;
+    let mockAngle = 0;      // degrees, changes to simulate turns
+    let mockTick = 0;
+
+    function mockFix() {
+      // Walk in a rough square: N → E → S → W
+      const segment = Math.floor(mockTick / 30) % 4;
+      const angles  = [0, 90, 180, 270];
+      mockAngle = angles[segment];
+
+      const rad = mockAngle * Math.PI / 180;
+      mockLat += Math.cos(rad) * STEP;
+      mockLon += Math.sin(rad) * STEP;
+      mockTick++;
+
+      const mockPos = {
+        coords: {
+          latitude:  mockLat,
+          longitude: mockLon,
+          altitude:  null,
+          accuracy:  12,
+          speed:     1.4,          // ~5 km/h
+          heading:   mockAngle,
+        },
+        timestamp: Date.now(),
+      };
+      onPosition(mockPos);
+    }
+
+    // Fire an immediate fix, then every 2 s
+    mockFix();
+    watchId = setInterval(mockFix, 2000);
+    console.log('[TRACKER] Mock GPS started (file:// mode)');
   }
 
   function onPosition(pos) {
@@ -208,14 +346,22 @@
     // Update GPS pill
     $('gps-pill').classList.add('active');
     $('gps-status').textContent = 'GPS LOCK';
+    console.log('[TRACKER] onPosition fired, isRecording:', isRecording, 'isPaused:', isPaused);
 
     // First fix — initialise map
     if (!mapInitialized) initMap(lat, lon);
 
+    // Always track the latest position for re-centering
+    lastPos = { lat, lon };
+
     // Move marker & accuracy ring
     crosshairMarker.setLatLng([lat, lon]);
     accuracyCircle.setLatLng([lat, lon]).setRadius(acc || 10);
-    map.setView([lat, lon]);
+
+    // Auto-follow unless the user has manually panned away
+    if (!userPanned) {
+      map.setView([lat, lon]);
+    }
 
     // Update info dashboard
     updateInfoPanel({ lat, lon, alt, acc, speed, heading });
@@ -225,29 +371,44 @@
 
     // Record data point when active
     if (isRecording && !isPaused) {
-      if (lastGoodPos && acc < 50) {
+      if (lastGoodPos && acc < settings.accFilter) {
         const d = haversine(lastGoodPos.lat, lastGoodPos.lon, lat, lon);
-        if (d > 0.003) {                          // ignore jitter < 3 m
+        if (d > settings.jitterFilter) {
           totalDistance += d;
           $('val-dist').textContent = totalDistance.toFixed(2) + ' km';
         }
       }
-      if (acc < 50) lastGoodPos = { lat, lon };
+      if (acc < settings.accFilter) lastGoodPos = { lat, lon };
 
+      // Always record the raw point (jitter filter only affects distance + line)
       currentPoints.push({ lat, lon, alt, acc, speed, heading, ts });
+      console.log('[TRACKER] point pushed, total:', currentPoints.length, 'acc:', acc, 'accFilter:', settings.accFilter);
 
-      // Smooth track using Exponential Moving Average
-      if (smoothedPoints.length === 0) {
-        smoothedPoints.push([lat, lon]);
+      if (settings.smoothLines) {
+        // Smooth track using Exponential Moving Average
+        if (smoothedPoints.length === 0) {
+          smoothedPoints.push([lat, lon]);
+        } else {
+          const alpha = 0.35;
+          const prev  = smoothedPoints[smoothedPoints.length - 1];
+          smoothedPoints.push([
+            prev[0] + alpha * (lat - prev[0]),
+            prev[1] + alpha * (lon - prev[1]),
+          ]);
+        }
+        trackLine.setLatLngs(smoothedPoints);
       } else {
-        const alpha = 0.35;
-        const prev  = smoothedPoints[smoothedPoints.length - 1];
-        smoothedPoints.push([
-          prev[0] + alpha * (lat - prev[0]),
-          prev[1] + alpha * (lon - prev[1]),
-        ]);
+        // Raw mode — plot every accepted point directly
+        if (acc < settings.accFilter) {
+          const d = lastGoodPos
+            ? haversine(lastGoodPos.lat, lastGoodPos.lon, lat, lon)
+            : Infinity;
+          if (d > settings.jitterFilter) {
+            smoothedPoints.push([lat, lon]);
+            trackLine.setLatLngs(smoothedPoints);
+          }
+        }
       }
-      trackLine.setLatLngs(smoothedPoints);
     }
   }
 
@@ -274,13 +435,15 @@
     return Math.round(h) + '° ' + dirs[Math.round(h / 45) % 8];
   }
 
-  function updateCompass(heading) {
+  function updateCompass(gpsHeading) {
     if (!compassControl) return;
     const container = compassControl.getContainer();
     if (!container) return;
     const needleGroup = container.querySelector('.compass-needle-group');
     const degEl       = container.querySelector('.compass-deg');
     const dirEl       = container.querySelector('.compass-dir');
+    // GPS heading takes priority when moving; fall back to device compass
+    const heading = gpsHeading != null ? gpsHeading : deviceHeading;
     if (heading == null) {
       degEl.textContent = '—°';
       dirEl.textContent = '—';
@@ -317,13 +480,15 @@
   // ── Info Dashboard ────────────────────────────────────────
   function updateInfoPanel({ lat, lon, alt, acc, speed, heading }) {
     const now = new Date();
+    // Use GPS heading when moving, fall back to device compass when stationary
+    const displayHeading = heading != null ? heading : deviceHeading;
     $('val-date').textContent    = now.toLocaleDateString('en-CA').replace(/-/g, '/');
     $('val-lat').textContent     = lat   != null ? lat.toFixed(6)           : '—';
     $('val-lon').textContent     = lon   != null ? lon.toFixed(6)           : '—';
     $('val-speed').textContent   = speed != null ? (speed * 3.6).toFixed(1) + ' km/h' : '0.0 km/h';
     $('val-acc').textContent     = acc   != null ? acc.toFixed(2) + ' m'   : '—';
     $('val-alt').textContent     = alt   != null ? Math.round(alt) + ' m'  : '—';
-    $('val-heading').textContent = headingLabel(heading);
+    $('val-heading').textContent = headingLabel(displayHeading);
   }
 
   // ── Live Clock ────────────────────────────────────────────
@@ -336,64 +501,110 @@
   }
 
   // ── Recording Controls ────────────────────────────────────
+
+  // Helpers to switch the Start/Pause toggle button appearance
+  function setStartMode() {
+    const btn = $('btn-start');
+    btn.querySelector('.icon-play').style.display  = '';
+    btn.querySelector('.icon-pause').style.display = 'none';
+    btn.querySelector('.btn-start-label').textContent = 'Start';
+    btn.classList.remove('pause');
+    btn.classList.add('start');
+  }
+
+  function setPauseMode() {
+    const btn = $('btn-start');
+    btn.querySelector('.icon-play').style.display  = 'none';
+    btn.querySelector('.icon-pause').style.display = '';
+    btn.querySelector('.btn-start-label').textContent = 'Pause';
+    btn.classList.remove('start');
+    btn.classList.add('pause');
+  }
+
+  // Start button — also acts as Pause toggle once recording is active
   $('btn-start').addEventListener('click', () => {
-    if (isRecording) return;
-    isRecording    = true;
-    isPaused       = false;
-    currentPoints  = [];
-    smoothedPoints = [];
-    totalDistance  = 0;
-    lastGoodPos    = null;
-    recStartTime   = Date.now();
+    if (!isRecording) {
+      // ── START ──────────────────────────────────────────────
+      isRecording    = true;
+      isPaused       = false;
+      currentPoints  = [];
+      smoothedPoints = [];
+      totalDistance  = 0;
+      lastGoodPos    = null;
+      recStartTime   = Date.now();
 
-    if (trackLine) trackLine.setLatLngs([]);
-    $('val-dist').textContent   = '0.00 km';
-    $('btn-start').disabled     = true;
-    $('btn-pause').disabled     = false;
-    $('btn-stop').disabled      = false;
-    $('rec-indicator').classList.add('show');
-    $('rec-label').textContent  = 'REC';
-  });
-
-  $('btn-pause').addEventListener('click', () => {
-    if (!isRecording) return;
-    isPaused = !isPaused;
-    $('btn-pause').classList.toggle('active-btn', isPaused);
-    $('rec-label').textContent = isPaused ? 'PAUSED' : 'REC';
+      if (trackLine) trackLine.setLatLngs([]);
+      $('val-dist').textContent = '0.00 km';
+      $('btn-stop').disabled    = false;
+      $('rec-indicator').classList.add('show');
+      $('rec-label').textContent = 'REC';
+      setPauseMode();
+    } else {
+      // ── PAUSE / RESUME toggle ──────────────────────────────
+      isPaused = !isPaused;
+      if (isPaused) {
+        setStartMode();   // button shows "Start" (resume)
+        $('rec-label').textContent = 'PAUSED';
+      } else {
+        setPauseMode();   // button shows "Pause"
+        $('rec-label').textContent = 'REC';
+      }
+    }
   });
 
   $('btn-stop').addEventListener('click', () => {
     if (!isRecording) return;
     isRecording = false;
     isPaused    = false;
-    $('btn-start').disabled = false;
-    $('btn-pause').disabled = true;
-    $('btn-stop').disabled  = true;
-    $('btn-pause').classList.remove('active-btn');
+    $('btn-stop').disabled = true;
     $('rec-indicator').classList.remove('show');
+    setStartMode();
     openNameModal();
   });
 
   // ── Name Modal ────────────────────────────────────────────
   function openNameModal() {
     $('activity-name-input').value = 'Hike ' + new Date().toLocaleDateString('en-CA');
+    // Show a summary so the user can confirm data was captured
+    const pts = currentPoints.length;
+    const dist = totalDistance.toFixed(2);
+    $('name-modal-summary').textContent =
+      pts + ' point' + (pts !== 1 ? 's' : '') + ' · ' + dist + ' km';
     $('name-modal').classList.add('open');
     setTimeout(() => $('activity-name-input').focus(), 100);
   }
 
   function saveActivity() {
     const name = $('activity-name-input').value.trim() || 'Unnamed Activity';
+
+    console.log('[TRACKER] saveActivity called, currentPoints.length:', currentPoints.length);
+    // Snapshot points array by value so later resets don't affect the saved record
     const record = {
-      id:       Date.now(),
+      id:       String(Date.now()),
       name,
       date:     new Date().toLocaleDateString('en-CA').replace(/-/g, '/'),
-      duration: Date.now() - recStartTime,
+      duration: recStartTime ? Date.now() - recStartTime : 0,
       distance: totalDistance,
-      points:   currentPoints,
+      points:   currentPoints.slice(),   // <-- snapshot, not reference
     };
-    const activities = JSON.parse(localStorage.getItem('tracker_activities') || '[]');
-    activities.unshift(record);
-    localStorage.setItem('tracker_activities', JSON.stringify(activities));
+
+    try {
+      const activities = JSON.parse(storage.get('tracker_activities') || '[]');
+      activities.unshift(record);
+      storage.set('tracker_activities', JSON.stringify(activities));
+      console.log('[TRACKER] saved ok, record.points.length:', record.points.length, 'id:', record.id);
+    } catch (err) {
+      // Storage quota exceeded — try saving without older activities
+      console.warn('localStorage full, saving only latest activity:', err);
+      try {
+        storage.set('tracker_activities', JSON.stringify([record]));
+      } catch (err2) {
+        console.error('Could not save activity:', err2);
+        alert('Could not save activity — storage is full.');
+        return;
+      }
+    }
+
     $('name-modal').classList.remove('open');
     if (trackLine) trackLine.setLatLngs([]);
   }
@@ -415,7 +626,7 @@
   }
 
   function renderHistoryList() {
-    const activities = JSON.parse(localStorage.getItem('tracker_activities') || '[]');
+    const activities = JSON.parse(storage.get('tracker_activities') || '[]');
     const list = $('history-list');
 
     if (activities.length === 0) {
@@ -434,13 +645,14 @@
       el.addEventListener('click', () => {
         list.querySelectorAll('.history-item').forEach(x => x.classList.remove('selected'));
         el.classList.add('selected');
-        showActivityDetail(parseInt(el.dataset.id, 10), activities);
+        showActivityDetail(el.dataset.id, activities);
       });
     });
   }
 
   function showActivityDetail(id, activities) {
-    const a      = activities.find(x => x.id === id);
+    const a      = activities.find(x => String(x.id) === String(id));
+    console.log('[TRACKER] showActivityDetail id:', id, 'found:', !!a, a ? 'points:' + a.points?.length : '');
     const detail = $('history-detail');
     if (!a) return;
 
@@ -489,6 +701,65 @@
   document.addEventListener('click', closeMenu);
   $('dropdown').addEventListener('click', e => e.stopPropagation());
 
+  // ── Settings Modal ───────────────────────────────────────
+
+  // Sync all UI controls to match the current settings object
+  function applySettingsToUI() {
+    const jitterMetres = Math.round(settings.jitterFilter * 1000);
+    $('setting-smooth').checked              = settings.smoothLines;
+    $('setting-jitter').value                = jitterMetres;
+    $('jitter-value-label').textContent      = jitterMetres + ' m';
+    $('setting-gps-interval').value          = String(settings.gpsInterval);
+    $('setting-acc-filter').value            = String(settings.accFilter);
+    $('jitter-row').classList.toggle('disabled', !settings.smoothLines);
+  }
+
+  $('settings-btn').addEventListener('click', () => {
+    applySettingsToUI();   // always reflect current values when opening
+    $('settings-modal').classList.add('open');
+    closeMenu();
+  });
+  $('settings-modal-close').addEventListener('click', () => $('settings-modal').classList.remove('open'));
+  $('settings-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+
+  // Smooth toggle
+  $('setting-smooth').addEventListener('change', function() {
+    settings.smoothLines = this.checked;
+    $('jitter-row').classList.toggle('disabled', !this.checked);
+    saveSettings();
+  });
+
+  // Jitter slider
+  $('setting-jitter').addEventListener('input', function() {
+    const metres = parseInt(this.value, 10);
+    settings.jitterFilter = metres / 1000;
+    $('jitter-value-label').textContent = metres + ' m';
+    saveSettings();
+  });
+
+  // GPS interval select — restart watch to apply
+  $('setting-gps-interval').addEventListener('change', function() {
+    settings.gpsInterval = parseInt(this.value, 10);
+    saveSettings();
+    if (watchId != null) {
+      if (location.protocol === 'file:') {
+        clearInterval(watchId);
+      } else {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      watchId = null;
+      startGPS();
+    }
+  });
+
+  // Accuracy filter select
+  $('setting-acc-filter').addEventListener('change', function() {
+    settings.accFilter = parseInt(this.value, 10);
+    saveSettings();
+  });
+
   // ── About Modal ───────────────────────────────────────────
   $('about-btn').addEventListener('click', () => {
     $('about-modal').classList.add('open');
@@ -503,9 +774,57 @@
     });
   });
 
+  // ── Device Orientation (compass fallback for heading) ────
+  function startCompass() {
+    // iOS 13+ requires a permission request for DeviceOrientationEvent
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // On iOS we can only request on a user gesture; attach a one-time
+      // listener to the first tap anywhere on the page
+      document.addEventListener('click', function reqPermission() {
+        DeviceOrientationEvent.requestPermission()
+          .then(state => { if (state === 'granted') listenOrientation(); })
+          .catch(() => {});
+        document.removeEventListener('click', reqPermission);
+      }, { once: true });
+    } else if (typeof DeviceOrientationEvent !== 'undefined') {
+      // Android and desktop — no permission needed
+      listenOrientation();
+    }
+  }
+
+  function listenOrientation() {
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    // Fallback for browsers that only fire 'deviceorientation'
+    window.addEventListener('deviceorientation', onOrientation, true);
+  }
+
+  function onOrientation(e) {
+    // `webkitCompassHeading` (iOS) is degrees clockwise from true north
+    // `alpha` (Android absolute) needs to be converted: heading = 360 - alpha
+    let heading = null;
+    if (e.webkitCompassHeading != null) {
+      heading = e.webkitCompassHeading;
+    } else if (e.absolute && e.alpha != null) {
+      heading = (360 - e.alpha) % 360;
+    } else if (e.alpha != null) {
+      // Non-absolute alpha — less reliable but better than nothing
+      heading = (360 - e.alpha) % 360;
+    }
+    if (heading == null) return;
+    deviceHeading = heading;
+    // Only push compass heading to the UI when GPS isn't providing one
+    // (updateCompass is called each GPS fix; here we refresh between fixes)
+    updateCompass(null);
+    // Also update the heading card directly so it stays live
+    const displayHeading = deviceHeading;
+    $('val-heading').textContent = headingLabel(displayHeading);
+  }
+
   // ── Boot ──────────────────────────────────────────────────
   startClock();
   startGPS();
+  startCompass();
 
   // Fallback map centre if GPS takes longer than 4 s
   setTimeout(() => {

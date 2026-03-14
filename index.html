@@ -39,6 +39,14 @@
       Switch to Light Theme
     </div>
     <div class="menu-divider"></div>
+    <div class="menu-item" id="settings-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      Settings
+    </div>
+    <div class="menu-divider"></div>
     <div class="menu-item" id="about-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -60,19 +68,24 @@
       <span class="rec-dot"></span>
       <span id="rec-label">REC</span>
     </div>
+    <button id="recenter-btn" aria-label="Re-center map">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <line x1="12" y1="2" x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+      Re-center
+    </button>
   </div>
 
   <!-- TOOLBAR -->
   <div id="toolbar">
     <button class="tb-btn start" id="btn-start">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-      Start
-    </button>
-    <button class="tb-btn pause" id="btn-pause" disabled>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-      </svg>
-      Pause
+      <svg class="icon-play" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+      <svg class="icon-pause" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      <span class="btn-start-label">Start</span>
     </button>
     <button class="tb-btn stop" id="btn-stop" disabled>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -143,6 +156,7 @@
     </div>
     <div class="modal-body">
       <div class="modal-prompt">Enter a name for this activity:</div>
+      <div id="name-modal-summary" class="name-modal-summary"></div>
       <input type="text" id="activity-name-input" placeholder="e.g. Morning Hike" maxlength="60">
       <div class="modal-actions">
         <button class="btn-secondary" id="name-discard">Discard</button>
@@ -184,6 +198,71 @@
         Works offline after first load. Install to home screen for the full native experience
         on iOS and Android.<br><br>
         Built with Leaflet.js + OpenStreetMap.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="modal-close" id="settings-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-body">
+
+        <div class="settings-section-label">Recording</div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">Smooth Route Lines</div>
+            <div class="settings-row-desc">Apply EMA filter to reduce GPS jitter on the drawn path</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="setting-smooth" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="settings-row" id="jitter-row">
+          <div class="settings-info">
+            <div class="settings-row-label">Jitter Filter <span id="jitter-value-label">3 m</span></div>
+            <div class="settings-row-desc">Minimum movement distance before a point is recorded</div>
+          </div>
+          <input type="range" id="setting-jitter" class="settings-slider"
+                 min="0" max="20" step="1" value="3">
+        </div>
+
+        <div class="settings-section-label" style="margin-top:16px">Data Points</div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">GPS Interval</div>
+            <div class="settings-row-desc">Maximum age of cached GPS position (lower = more frequent)</div>
+          </div>
+          <select id="setting-gps-interval" class="settings-select">
+            <option value="500">0.5 s</option>
+            <option value="1000" selected>1 s</option>
+            <option value="2000">2 s</option>
+            <option value="5000">5 s</option>
+          </select>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">Accuracy Filter</div>
+            <div class="settings-row-desc">Discard points worse than this accuracy (metres)</div>
+          </div>
+          <select id="setting-acc-filter" class="settings-select">
+            <option value="20">20 m</option>
+            <option value="50" selected>50 m</option>
+            <option value="100">100 m</option>
+            <option value="9999">Off</option>
+          </select>
+        </div>
+
       </div>
     </div>
   </div>
