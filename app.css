@@ -76,13 +76,17 @@ body {
 
 /* ── Header ────────────────────────────────────────────── */
 #header {
-  height: var(--header-h);
+  /* Grow by the iOS status bar height in standalone PWA mode */
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  padding: 0 16px;
   position: relative;
   z-index: 1000;
   flex-shrink: 0;
@@ -134,7 +138,7 @@ body {
 /* ── Dropdown Menu ─────────────────────────────────────── */
 #dropdown {
   position: absolute;
-  top: var(--header-h);
+  top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   right: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
