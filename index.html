@@ -47,6 +47,15 @@
       Settings
     </div>
     <div class="menu-divider"></div>
+    <div class="menu-item" id="download-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download Area
+    </div>
+    <div class="menu-divider"></div>
     <div class="menu-item" id="about-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -206,6 +215,84 @@
         </svg>
         github.com/psiborg/Tracker
       </a>
+    </div>
+  </div>
+</div>
+
+<!-- DOWNLOAD AREA MODAL -->
+<div class="modal-overlay" id="download-modal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title">Offline Maps</span>
+      <button class="modal-close" id="download-modal-close">✕</button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="dl-tabs">
+      <button class="dl-tab active" id="dl-tab-download" data-tab="dl-pane-download">Download</button>
+      <button class="dl-tab" id="dl-tab-saved" data-tab="dl-pane-saved">Saved Areas</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- ── Download pane ── -->
+      <div class="dl-pane settings-body" id="dl-pane-download">
+
+        <div class="settings-row" style="padding-top:4px">
+          <div class="settings-info">
+            <div class="settings-row-label">Area Name</div>
+            <div class="settings-row-desc">Label to identify this download</div>
+          </div>
+          <input type="text" id="dl-area-name" class="settings-select"
+                 placeholder="e.g. Bruce Trail" maxlength="40"
+                 style="min-width:130px;text-align:left;padding:5px 8px">
+        </div>
+
+        <div class="settings-section-label" style="margin-top:4px">Map Layers</div>
+        <div class="dl-layer-checks">
+          <label class="dl-check"><input type="checkbox" id="dl-osm" checked> 🗺 OpenStreetMap</label>
+          <label class="dl-check"><input type="checkbox" id="dl-topo"> 🏔 OpenTopoMap</label>
+        </div>
+
+        <div class="settings-section-label" style="margin-top:14px">Zoom Range</div>
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">Min Zoom <span id="dl-min-label">10</span></div>
+            <div class="settings-row-desc">Overview tiles — small files, wide area</div>
+          </div>
+          <input type="range" id="dl-zoom-min" class="settings-slider" min="8" max="14" step="1" value="10">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info">
+            <div class="settings-row-label">Max Zoom <span id="dl-max-label">16</span></div>
+            <div class="settings-row-desc">Detail tiles — larger files, more storage</div>
+          </div>
+          <input type="range" id="dl-zoom-max" class="settings-slider" min="12" max="18" step="1" value="16">
+        </div>
+
+        <div class="dl-estimate-row">
+          <span id="dl-estimate">Estimated: calculating…</span>
+        </div>
+
+        <div class="dl-progress-wrap" id="dl-progress-wrap" style="display:none">
+          <div class="dl-progress-bar-track">
+            <div class="dl-progress-bar-fill" id="dl-progress-fill"></div>
+          </div>
+          <div class="dl-progress-label" id="dl-progress-label">0 / 0</div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:14px">
+          <button class="btn-secondary" id="dl-cancel-btn">Cancel</button>
+          <button class="btn-primary" id="dl-start-btn">Download</button>
+        </div>
+
+      </div>
+
+      <!-- ── Saved Areas pane ── -->
+      <div class="dl-pane" id="dl-pane-saved" style="display:none">
+        <div id="dl-areas-list" class="dl-areas-list"></div>
+      </div>
+
     </div>
   </div>
 </div>

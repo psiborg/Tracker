@@ -109,20 +109,6 @@
       attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
     });
 
-    const stadiaOutdoors = L.tileLayer('https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.{ext}', {
-      minZoom: 0,
-      maxZoom: 20,
-      attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      ext: 'png',
-    });
-
-    const stadiaSatellite = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.{ext}', {
-      minZoom: 0,
-      maxZoom: 20,
-      attribution: '&copy; CNES, Distribution Airbus DS, © Airbus DS, © PlanetObserver (Contains Copernicus Data) | &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      ext: 'jpg',
-    });
-
     // ── Overlay Layers ───────────────────────────────────────
     const waymarkedHiking = L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
       maxZoom: 18,
@@ -181,10 +167,8 @@
 
     // ── Layer Control ────────────────────────────────────────
     const baseLayers = {
-      '🗺 OpenStreetMap':   osmStandard,
-      '🏔 OpenTopoMap':     openTopoMap,
-      // '🥾 Stadia Outdoors': stadiaOutdoors,
-      // '🛰 Satellite':       stadiaSatellite,
+      '🗺 OpenStreetMap': osmStandard,
+      '🏔 OpenTopoMap':   openTopoMap,
     };
 
     const overlayLayers = {
@@ -888,6 +872,320 @@
   $('setting-acc-filter').addEventListener('change', function() {
     settings.accFilter = parseInt(this.value, 10);
     saveSettings();
+  });
+
+  // ── Download Area ────────────────────────────────────────
+
+  // Convert lat/lon to tile x/y at a given zoom level
+  function latLonToTile(lat, lon, z) {
+    const n = Math.pow(2, z);
+    const x = Math.floor((lon + 180) / 360 * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    return { x, y };
+  }
+
+  // Count tiles needed for a bounding box across a zoom range
+  function countTiles(bounds, minZ, maxZ) {
+    let total = 0;
+    for (let z = minZ; z <= maxZ; z++) {
+      const nw = latLonToTile(bounds.getNorth(), bounds.getWest(), z);
+      const se = latLonToTile(bounds.getSouth(), bounds.getEast(), z);
+      total += (se.x - nw.x + 1) * (se.y - nw.y + 1);
+    }
+    return total;
+  }
+
+  // Build list of tile URLs for the selected layers and zoom range
+  function buildTileUrls(bounds, minZ, maxZ, layers) {
+    const urls = [];
+    const templates = {
+      osm:      (z, x, y) => {
+        const s = ['a','b','c'][(x + y) % 3];
+        return `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+      },
+      topo:     (z, x, y) => {
+        const s = ['a','b','c'][(x + y) % 3];
+        return `https://${s}.tile.opentopomap.org/${z}/${x}/${y}.png`;
+      },
+    };
+
+    for (let z = minZ; z <= maxZ; z++) {
+      const nw = latLonToTile(bounds.getNorth(), bounds.getWest(), z);
+      const se = latLonToTile(bounds.getSouth(), bounds.getEast(), z);
+      for (let x = nw.x; x <= se.x; x++) {
+        for (let y = nw.y; y <= se.y; y++) {
+          layers.forEach(id => {
+            if (templates[id]) urls.push(templates[id](z, x, y));
+          });
+        }
+      }
+    }
+    return urls;
+  }
+
+  // ── Saved Areas metadata ─────────────────────────────────
+  const DL_AREAS_KEY = 'tracker_dl_areas';
+
+  function loadAreas() {
+    try { return JSON.parse(storage.get(DL_AREAS_KEY) || '[]'); }
+    catch(e) { return []; }
+  }
+
+  function saveAreas(areas) {
+    try { storage.set(DL_AREAS_KEY, JSON.stringify(areas)); }
+    catch(e) { console.warn('Could not save area metadata:', e); }
+  }
+
+  function renderAreasList() {
+    const areas = loadAreas();
+    const list  = $('dl-areas-list');
+    if (areas.length === 0) {
+      list.innerHTML = '<div class="dl-areas-empty">No areas downloaded yet.<br>Use the Download tab to cache an area for offline use.</div>';
+      return;
+    }
+    list.innerHTML = areas.map(a => `
+      <div class="dl-area-item" data-id="${a.id}">
+        <div class="dl-area-main">
+          <div class="dl-area-name-wrap">
+            <span class="dl-area-name">${escHtml(a.name)}</span>
+            <button class="dl-area-action dl-rename-btn" data-id="${a.id}" title="Rename">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="dl-area-meta">
+            ${a.date} · ${a.tileCount.toLocaleString()} tiles · zoom ${a.zMin}–${a.zMax}
+            · ${a.layers.map(l => l === 'osm' ? 'OSM' : 'Topo').join(' + ')}
+          </div>
+          <div class="dl-area-meta">
+            ${a.bounds.s.toFixed(3)}°S  ${a.bounds.w.toFixed(3)}°W
+            → ${a.bounds.n.toFixed(3)}°N  ${a.bounds.e.toFixed(3)}°E
+          </div>
+        </div>
+        <div class="dl-area-actions">
+          <button class="dl-area-action dl-zoom-btn" data-id="${a.id}" title="Zoom to area">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
+          <button class="dl-area-action dl-delete-btn" data-id="${a.id}" title="Delete">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `).join('');
+
+    // Zoom-to button
+    list.querySelectorAll('.dl-zoom-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const area = loadAreas().find(a => a.id === btn.dataset.id);
+        if (!area || !map) return;
+        map.fitBounds([
+          [area.bounds.s, area.bounds.w],
+          [area.bounds.n, area.bounds.e],
+        ], { padding: [20, 20] });
+        $('download-modal').classList.remove('open');
+      });
+    });
+
+    // Rename button — inline edit
+    list.querySelectorAll('.dl-rename-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.dl-area-item');
+        const nameEl = item.querySelector('.dl-area-name');
+        const current = nameEl.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = current;
+        input.className = 'dl-area-inline-input';
+        input.maxLength = 40;
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const commit = () => {
+          const newName = input.value.trim() || current;
+          const areas = loadAreas();
+          const idx = areas.findIndex(a => a.id === btn.dataset.id);
+          if (idx !== -1) { areas[idx].name = newName; saveAreas(areas); }
+          renderAreasList();
+        };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+          if (e.key === 'Escape') { input.value = current; input.blur(); }
+        });
+      });
+    });
+
+    // Delete button
+    list.querySelectorAll('.dl-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const areas = loadAreas().filter(a => a.id !== btn.dataset.id);
+        saveAreas(areas);
+        // Note: we don't evict tiles from cache on delete — they may be shared
+        // with other areas. The service worker's tile cache is self-managing.
+        renderAreasList();
+      });
+    });
+  }
+
+  // ── Download state ────────────────────────────────────────
+  let _dlAborted = false;
+
+  function updateDlEstimate() {
+    if (!map) return;
+    const minZ    = parseInt($('dl-zoom-min').value, 10);
+    const maxZ    = parseInt($('dl-zoom-max').value, 10);
+    const layers  = ['osm','topo'].filter(id => $('dl-' + id).checked);
+    const count   = countTiles(map.getBounds(), Math.min(minZ, maxZ), Math.max(minZ, maxZ)) * (layers.length || 1);
+    const mb      = (count * 15 / 1024).toFixed(1);
+    $('dl-estimate').textContent = `~${count.toLocaleString()} tiles · ~${mb} MB`;
+    $('dl-estimate').style.color = count > 2000 ? 'var(--danger)' : 'var(--text-secondary)';
+  }
+
+  async function runDownload() {
+    if (!map || !('caches' in window)) {
+      alert('Offline tile download requires a secure (HTTPS or localhost) connection.');
+      return;
+    }
+
+    const name   = $('dl-area-name').value.trim() ||
+                   'Area ' + new Date().toLocaleDateString('en-CA');
+    const minZ   = parseInt($('dl-zoom-min').value, 10);
+    const maxZ   = parseInt($('dl-zoom-max').value, 10);
+    const zMin   = Math.min(minZ, maxZ);
+    const zMax   = Math.max(minZ, maxZ);
+    const layers = ['osm','topo'].filter(id => $('dl-' + id).checked);
+    const bounds = map.getBounds();
+
+    if (layers.length === 0) { alert('Select at least one map layer.'); return; }
+
+    const urls  = buildTileUrls(bounds, zMin, zMax, layers);
+    const total = urls.length;
+
+    if (total > 3000) {
+      alert(`Too many tiles (${total.toLocaleString()}). Reduce the zoom range or zoom in closer.`);
+      return;
+    }
+
+    // Show progress UI
+    _dlAborted = false;
+    $('dl-progress-wrap').style.display = '';
+    $('dl-start-btn').disabled = true;
+    $('dl-cancel-btn').textContent = 'Stop';
+
+    const tileCache = await caches.open('tracker-tiles');
+    let done = 0;
+
+    for (const url of urls) {
+      if (_dlAborted) break;
+      const hit = await tileCache.match(url).catch(() => null);
+      if (!hit) {
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          if (res.ok) await tileCache.put(url, res);
+        } catch (e) { /* skip unavailable tile */ }
+      }
+      done++;
+      const pct = Math.round(done / total * 100);
+      $('dl-progress-fill').style.width = pct + '%';
+      $('dl-progress-label').textContent = `${done.toLocaleString()} / ${total.toLocaleString()}`;
+      if (done % 10 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+
+    // Reset progress UI
+    $('dl-start-btn').disabled = false;
+    $('dl-cancel-btn').textContent = 'Cancel';
+    $('dl-progress-wrap').style.display = 'none';
+    $('dl-progress-fill').style.width = '0%';
+
+    if (!_dlAborted) {
+      // Save area metadata
+      const area = {
+        id:        String(Date.now()),
+        name,
+        date:      new Date().toLocaleDateString('en-CA').replace(/-/g, '/'),
+        tileCount: done,
+        zMin, zMax,
+        layers,
+        bounds: {
+          n: parseFloat(bounds.getNorth().toFixed(5)),
+          s: parseFloat(bounds.getSouth().toFixed(5)),
+          e: parseFloat(bounds.getEast().toFixed(5)),
+          w: parseFloat(bounds.getWest().toFixed(5)),
+        },
+      };
+      const areas = loadAreas();
+      areas.unshift(area);
+      saveAreas(areas);
+
+      $('dl-estimate').textContent = `✓ ${done.toLocaleString()} tiles cached`;
+      $('dl-estimate').style.color = 'var(--accent)';
+      $('dl-area-name').value = '';
+
+      // Auto-switch to Saved Areas tab
+      switchDlTab('dl-pane-saved');
+    } else {
+      updateDlEstimate();
+    }
+  }
+
+  // ── Tab switching ─────────────────────────────────────────
+  function switchDlTab(paneId) {
+    document.querySelectorAll('.dl-pane').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.dl-tab').forEach(t => t.classList.remove('active'));
+    $(paneId).style.display = '';
+    document.querySelector(`.dl-tab[data-tab="${paneId}"]`).classList.add('active');
+    if (paneId === 'dl-pane-saved') renderAreasList();
+  }
+
+  document.querySelectorAll('.dl-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchDlTab(tab.dataset.tab));
+  });
+
+  // ── Wire up Download modal ────────────────────────────────
+  $('download-btn').addEventListener('click', () => {
+    updateDlEstimate();
+    switchDlTab('dl-pane-download');
+    $('download-modal').classList.add('open');
+    closeMenu();
+  });
+  $('download-modal-close').addEventListener('click', () => {
+    _dlAborted = true;
+    $('download-modal').classList.remove('open');
+  });
+  $('download-modal').addEventListener('click', function(e) {
+    if (e.target === this) { _dlAborted = true; this.classList.remove('open'); }
+  });
+  $('dl-start-btn').addEventListener('click', runDownload);
+  $('dl-cancel-btn').addEventListener('click', () => {
+    _dlAborted = true;
+    $('download-modal').classList.remove('open');
+  });
+
+  // Re-estimate when controls change
+  ['dl-zoom-min','dl-zoom-max','dl-osm','dl-topo'].forEach(id => {
+    $(id).addEventListener('input', updateDlEstimate);
+    $(id).addEventListener('change', updateDlEstimate);
+  });
+
+  // Keep slider labels in sync
+  $('dl-zoom-min').addEventListener('input', function() {
+    $('dl-min-label').textContent = this.value;
+    updateDlEstimate();
+  });
+  $('dl-zoom-max').addEventListener('input', function() {
+    $('dl-max-label').textContent = this.value;
+    updateDlEstimate();
   });
 
   // ── About Modal ───────────────────────────────────────────
