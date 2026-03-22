@@ -126,6 +126,34 @@ body {
 
 #menu-btn:hover { background: var(--bg-tertiary); }
 
+/* Wake lock indicator — shown in header while screen lock is held */
+#wakelock-indicator {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--warn);
+  opacity: 0.5;
+  margin-left: auto;
+  margin-right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  transition: opacity 0.3s, color 0.3s;
+  pointer-events: none;
+}
+
+#wakelock-indicator.active {
+  display: flex;
+  opacity: 1;
+  color: var(--accent);
+  animation: wakelock-pulse 3s ease-in-out infinite;
+}
+
+@keyframes wakelock-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
 #menu-btn span {
   display: block;
   width: 22px;

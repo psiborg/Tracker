@@ -23,6 +23,7 @@
   let recStartTime  = null;
   let deviceHeading    = null;   // compass heading from Device Orientation API (fallback)
   let lastRecordedTs   = 0;      // timestamp of the last recorded point (throttle)
+  let wakeLock         = null;   // WakeLockSentinel — keeps screen on during recording
 
   // ── Settings State ────────────────────────────────────────
   const SETTINGS_KEY = 'tracker_settings';
@@ -544,15 +545,18 @@
       $('rec-indicator').classList.add('show');
       $('rec-label').textContent = 'REC';
       setPauseMode();
+      acquireWakeLock();
     } else {
       // ── PAUSE / RESUME toggle ──────────────────────────────
       isPaused = !isPaused;
       if (isPaused) {
         setStartMode();   // button shows "Start" (resume)
         $('rec-label').textContent = 'PAUSED';
+        releaseWakeLock();
       } else {
         setPauseMode();   // button shows "Pause"
         $('rec-label').textContent = 'REC';
+        acquireWakeLock();
       }
     }
   });
@@ -564,6 +568,7 @@
     $('btn-stop').disabled = true;
     $('rec-indicator').classList.remove('show');
     setStartMode();
+    releaseWakeLock();
     openNameModal();
   });
 
@@ -1257,6 +1262,45 @@
     const displayHeading = deviceHeading;
     $('val-heading').textContent = headingLabel(displayHeading);
   }
+
+  // ── Wake Lock ────────────────────────────────────────────
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) return;   // API not supported
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      $('wakelock-indicator').classList.add('active');
+
+      // The lock is released automatically when the tab loses visibility.
+      // Re-acquire it as soon as the page becomes visible again.
+      wakeLock.addEventListener('release', () => {
+        $('wakelock-indicator').classList.remove('active');
+        wakeLock = null;
+        // Re-acquire only if still recording
+        if (isRecording && !isPaused) {
+          acquireWakeLock();
+        }
+      });
+    } catch (err) {
+      // Permission denied or device doesn't support it — fail silently
+      console.warn('Wake lock request failed:', err);
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+    $('wakelock-indicator').classList.remove('active');
+  }
+
+  // Re-acquire if the page comes back into view while still recording
+  // (handles the case where the user switches apps and returns)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && isRecording && !isPaused && !wakeLock) {
+      acquireWakeLock();
+    }
+  });
 
   // ── Boot ──────────────────────────────────────────────────
   startClock();
