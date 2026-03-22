@@ -31,9 +31,9 @@
   const SETTINGS_DEFAULTS = {
     smoothLines:   true,
     jitterFilter:  0.003,  // km (3 m)
-    gpsInterval:   1000,   // ms — watchPosition maximumAge
-    pointInterval: 5000,   // ms — minimum gap between recorded points (5 s default)
-    accFilter:     50,     // m
+    gpsInterval:   2000,   // ms — watchPosition maximumAge
+    pointInterval: 2000,   // ms — minimum gap between recorded points (2s default)
+    accFilter:     20,     // m
   };
 
   // Load persisted settings, falling back to defaults for any missing key
@@ -1265,6 +1265,7 @@
 
   // ── Wake Lock ────────────────────────────────────────────
   async function acquireWakeLock() {
+    console.log('Acquiring wake lock...');
     if (!('wakeLock' in navigator)) return;   // API not supported
     try {
       wakeLock = await navigator.wakeLock.request('screen');
