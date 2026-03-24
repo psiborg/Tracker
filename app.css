@@ -1,4 +1,4 @@
-/* ── CSS Custom Properties ─────────────────────────────── */
+/* -- CSS Custom Properties ------------------------------- */
 :root {
   --bg-primary:    #0d1117;
   --bg-secondary:  #161b22;
@@ -19,7 +19,7 @@
   --toolbar-h:     64px;
 }
 
-/* ── Light Theme Overrides ─────────────────────────────── */
+/* -- Light Theme Overrides ------------------------------- */
 .light {
   --bg-primary:    #f0f4f8;
   --bg-secondary:  #ffffff;
@@ -38,7 +38,7 @@
   --info:          #3182ce;
 }
 
-/* ── Reset & Base ──────────────────────────────────────── */
+/* -- Reset & Base ---------------------------------------- */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -63,7 +63,7 @@ body {
   height: 100dvh;
 }
 
-/* ── Animations ────────────────────────────────────────── */
+/* -- Animations ------------------------------------------ */
 @keyframes dropIn {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -74,7 +74,7 @@ body {
   50%       { opacity: 0.3; }
 }
 
-/* ── Header ────────────────────────────────────────────── */
+/* -- Header ---------------------------------------------- */
 #header {
   /* Grow by the iOS status bar height in standalone PWA mode */
   height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
@@ -163,7 +163,7 @@ body {
   transition: transform 0.3s, opacity 0.3s;
 }
 
-/* ── Dropdown Menu ─────────────────────────────────────── */
+/* -- Dropdown Menu --------------------------------------- */
 #dropdown {
   position: absolute;
   top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
@@ -202,7 +202,7 @@ body {
   background: var(--border);
 }
 
-/* ── Map ───────────────────────────────────────────────── */
+/* -- Map ------------------------------------------------- */
 #map-container {
   flex: 1;
   position: relative;
@@ -240,7 +240,7 @@ body {
 /* Leaflet dark tile tint */
 .dark .leaflet-tile { filter: brightness(0.85) saturate(0.9); }
 
-/* ── Layer Control ─────────────────────────────────────── */
+/* -- Layer Control --------------------------------------- */
 .leaflet-control-layers {
   background: var(--bg-secondary) !important;
   border: 1px solid var(--border) !important;
@@ -359,7 +359,7 @@ body {
   animation: blink 1s infinite;
 }
 
-/* ── Re-center Button ──────────────────────────────────── */
+/* -- Re-center Button ------------------------------------ */
 #recenter-btn {
   position: absolute;
   bottom: 18px;
@@ -400,7 +400,7 @@ body {
 .crosshair-icon { background: none !important; border: none !important; }
 .crosshair-svg  { filter: drop-shadow(0 0 6px rgba(57, 211, 83, 0.8)); }
 
-/* ── Toolbar ───────────────────────────────────────────── */
+/* -- Toolbar --------------------------------------------- */
 #toolbar {
   height: var(--toolbar-h);
   background: var(--bg-secondary);
@@ -459,7 +459,7 @@ body {
 .tb-btn.history { border-color: var(--info); color: var(--info); }
 .tb-btn.history:hover { background: var(--info); color: #fff; }
 
-/* ── Info Panel ────────────────────────────────────────── */
+/* -- Info Panel ------------------------------------------ */
 #info-panel {
   background: var(--bg-primary);
   flex-shrink: 0;
@@ -499,7 +499,7 @@ body {
 
 .info-value.accent { color: var(--text-accent); }
 
-/* ── Modal Base ────────────────────────────────────────── */
+/* -- Modal Base ------------------------------------------ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -563,7 +563,7 @@ body {
 
 .modal-body { flex: 1; overflow: hidden; }
 
-/* ── Name Modal ────────────────────────────────────────── */
+/* -- Name Modal ------------------------------------------ */
 #name-modal .modal-body {
   padding: 24px 20px;
   display: flex;
@@ -622,7 +622,7 @@ body {
 .btn-secondary            { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
 .btn-secondary:hover      { background: var(--border); }
 
-/* ── History Modal ─────────────────────────────────────── */
+/* -- History Modal --------------------------------------- */
 #history-modal .modal-body {
   display: flex;
   overflow: hidden;
@@ -746,7 +746,7 @@ body {
   text-transform: uppercase;
 }
 
-/* ── About Modal ───────────────────────────────────────── */
+/* -- About Modal ----------------------------------------- */
 #about-modal .modal-body {
   padding: 24px 20px;
   overflow-y: auto;
@@ -805,7 +805,7 @@ body {
   color: var(--info);
 }
 
-/* ── Compass Control ───────────────────────────────────── */
+/* -- Compass Control ------------------------------------- */
 .leaflet-compass-control {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -869,7 +869,7 @@ body {
 
 
 
-/* ── Settings Modal ────────────────────────────────────── */
+/* -- Settings Modal -------------------------------------- */
 .settings-body {
   padding: 16px 20px 20px;
   overflow-y: auto;
@@ -1022,7 +1022,7 @@ body {
 }
 
 
-/* ── Download Area Modal ───────────────────────────────── */
+/* -- Download Area Modal --------------------------------- */
 
 /* Tab bar */
 .dl-tabs {

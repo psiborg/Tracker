@@ -6,10 +6,10 @@
 (function () {
   'use strict';
 
-  // ── Shorthand ─────────────────────────────────────────────
+  // -- Shorthand ---------------------------------------------
   const $ = id => document.getElementById(id);
 
-  // ── App State ─────────────────────────────────────────────
+  // -- App State ---------------------------------------------
   let isDark        = true;
   let isRecording   = false;
   let isPaused      = false;
@@ -25,7 +25,7 @@
   let lastRecordedTs   = 0;      // timestamp of the last recorded point (throttle)
   let wakeLock         = null;   // WakeLockSentinel — keeps screen on during recording
 
-  // ── Settings State ────────────────────────────────────────
+  // -- Settings State ----------------------------------------
   const SETTINGS_KEY = 'tracker_settings';
 
   const SETTINGS_DEFAULTS = {
@@ -57,7 +57,7 @@
   // Apply loaded values to the settings object (mutable so other code can read it)
   const settings = loadSettings();
 
-  // ── Storage Abstraction ──────────────────────────────────
+  // -- Storage Abstraction ----------------------------------
   // On file:// localStorage may be blocked; fall back to in-memory store.
   const _memStore = {};
   const storage = {
@@ -71,13 +71,13 @@
     },
   };
 
-  // ── Map Objects ───────────────────────────────────────────
+  // -- Map Objects -------------------------------------------
   let map, crosshairMarker, trackLine, accuracyCircle, compassControl, layerControl;
   let mapInitialized = false;
   const activityLayers = {};   // id → L.Polyline, kept in sync with saved activities
   let userPanned     = false;   // true when user has manually moved the map
 
-  // ── SVG Icons ─────────────────────────────────────────────
+  // -- SVG Icons ---------------------------------------------
   const SVG_SUN  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <circle cx="12" cy="12" r="5"/>
     <line x1="12" y1="1"  x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
@@ -90,7 +90,7 @@
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
   </svg>`;
 
-  // ── Map Initialisation ────────────────────────────────────
+  // -- Map Initialisation ------------------------------------
   function initMap(lat, lon) {
     map = L.map('map', {
       center: [lat, lon],
@@ -99,7 +99,7 @@
       attributionControl: true,
     });
 
-    // ── Base Layers ──────────────────────────────────────────
+    // -- Base Layers ------------------------------------------
     const osmStandard = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
@@ -110,7 +110,7 @@
       attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
     });
 
-    // ── Overlay Layers ───────────────────────────────────────
+    // -- Overlay Layers ---------------------------------------
     const waymarkedHiking = L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
       maxZoom: 18,
       attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Map style: &copy; <a href="https://waymarkedtrails.org">waymarkedtrails.org</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
@@ -124,7 +124,7 @@
     // Add default base layer
     osmStandard.addTo(map);
 
-    // ── Compass Control ──────────────────────────────────────
+    // -- Compass Control --------------------------------------
     const CompassControl = L.Control.extend({
       options: { position: 'topleft' },
 
@@ -166,7 +166,7 @@
     compassControl = new CompassControl();
     compassControl.addTo(map);
 
-    // ── Layer Control ────────────────────────────────────────
+    // -- Layer Control ----------------------------------------
     const baseLayers = {
       '🗺 OpenStreetMap': osmStandard,
       '🏔 OpenTopoMap':   openTopoMap,
@@ -248,7 +248,7 @@
     mapInitialized = true;
   }
 
-  // ── GPS ───────────────────────────────────────────────────
+  // -- GPS ---------------------------------------------------
   function startGPS() {
     const isFileProtocol = location.protocol === 'file:';
 
@@ -288,7 +288,7 @@
     window._gpsPollId = pollId;
   }
 
-  // ── Mock GPS (file:// testing only) ──────────────────────
+  // -- Mock GPS (file:// testing only) ----------------------
   // Simulates a walk around a city block near Toronto starting point
   function startMockGPS() {
     const MOCK_START = { lat: 43.6532, lon: -79.3832 };
@@ -422,7 +422,7 @@
     console.warn('GPS error', err);
   }
 
-  // ── Utilities ─────────────────────────────────────────────
+  // -- Utilities ---------------------------------------------
   function haversine(lat1, lon1, lat2, lon2) {
     const R    = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -482,7 +482,7 @@
       .replace(/>/g, '&gt;');
   }
 
-  // ── Info Dashboard ────────────────────────────────────────
+  // -- Info Dashboard ----------------------------------------
   function updateInfoPanel({ lat, lon, alt, acc, speed, heading }) {
     const now = new Date();
     // Use GPS heading when moving, fall back to device compass when stationary
@@ -496,7 +496,7 @@
     $('val-heading').textContent = headingLabel(displayHeading);
   }
 
-  // ── Live Clock ────────────────────────────────────────────
+  // -- Live Clock --------------------------------------------
   function startClock() {
     const tick = () => {
       $('val-time').textContent = new Date().toTimeString().slice(0, 8);
@@ -505,7 +505,7 @@
     clockInterval = setInterval(tick, 1000);
   }
 
-  // ── Recording Controls ────────────────────────────────────
+  // -- Recording Controls ------------------------------------
 
   // Helpers to switch the Start/Pause toggle button appearance
   function setStartMode() {
@@ -529,7 +529,7 @@
   // Start button — also acts as Pause toggle once recording is active
   $('btn-start').addEventListener('click', () => {
     if (!isRecording) {
-      // ── START ──────────────────────────────────────────────
+      // -- START ----------------------------------------------
       isRecording    = true;
       isPaused       = false;
       currentPoints  = [];
@@ -547,7 +547,7 @@
       setPauseMode();
       acquireWakeLock();
     } else {
-      // ── PAUSE / RESUME toggle ──────────────────────────────
+      // -- PAUSE / RESUME toggle ------------------------------
       isPaused = !isPaused;
       if (isPaused) {
         setStartMode();   // button shows "Start" (resume)
@@ -572,7 +572,7 @@
     openNameModal();
   });
 
-  // ── Name Modal ────────────────────────────────────────────
+  // -- Name Modal --------------------------------------------
   function openNameModal() {
     $('activity-name-input').value = 'Hike ' + new Date().toLocaleDateString('en-CA');
     // Show a summary so the user can confirm data was captured
@@ -584,7 +584,7 @@
     setTimeout(() => $('activity-name-input').focus(), 100);
   }
 
-  // ── Activity Path Layers ─────────────────────────────────
+  // -- Activity Path Layers ---------------------------------
 
   // Cycle through these colours so multiple activities are visually distinct
   const LAYER_COLOURS = [
@@ -687,7 +687,7 @@
     if (e.key === 'Enter') saveActivity();
   });
 
-  // ── History Modal ─────────────────────────────────────────
+  // -- History Modal -----------------------------------------
   function openHistory() {
     $('history-modal').classList.add('open');
     renderHistoryList();
@@ -789,7 +789,7 @@
   $('btn-history').addEventListener('click', openHistory);
   $('history-modal-close').addEventListener('click', () => $('history-modal').classList.remove('open'));
 
-  // ── Theme Toggle ──────────────────────────────────────────
+  // -- Theme Toggle ------------------------------------------
   $('theme-toggle').addEventListener('click', () => {
     isDark = !isDark;
     document.documentElement.classList.toggle('light', !isDark);
@@ -802,7 +802,7 @@
     closeMenu();
   });
 
-  // ── Hamburger Menu ────────────────────────────────────────
+  // -- Hamburger Menu ----------------------------------------
   function closeMenu() { $('dropdown').classList.remove('open'); }
 
   $('menu-btn').addEventListener('click', e => {
@@ -813,7 +813,7 @@
   document.addEventListener('click', closeMenu);
   $('dropdown').addEventListener('click', e => e.stopPropagation());
 
-  // ── Settings Modal ───────────────────────────────────────
+  // -- Settings Modal ---------------------------------------
 
   // Sync all UI controls to match the current settings object
   function applySettingsToUI() {
@@ -879,7 +879,7 @@
     saveSettings();
   });
 
-  // ── Download Area ────────────────────────────────────────
+  // -- Download Area ----------------------------------------
 
   // Convert lat/lon to tile x/y at a given zoom level
   function latLonToTile(lat, lon, z) {
@@ -929,7 +929,7 @@
     return urls;
   }
 
-  // ── Saved Areas metadata ─────────────────────────────────
+  // -- Saved Areas metadata ---------------------------------
   const DL_AREAS_KEY = 'tracker_dl_areas';
 
   function loadAreas() {
@@ -1043,7 +1043,7 @@
     });
   }
 
-  // ── Download state ────────────────────────────────────────
+  // -- Download state ----------------------------------------
   let _dlAborted = false;
 
   function updateDlEstimate() {
@@ -1144,7 +1144,7 @@
     }
   }
 
-  // ── Tab switching ─────────────────────────────────────────
+  // -- Tab switching -----------------------------------------
   function switchDlTab(paneId) {
     document.querySelectorAll('.dl-pane').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.dl-tab').forEach(t => t.classList.remove('active'));
@@ -1157,7 +1157,7 @@
     tab.addEventListener('click', () => switchDlTab(tab.dataset.tab));
   });
 
-  // ── Wire up Download modal ────────────────────────────────
+  // -- Wire up Download modal --------------------------------
   $('download-btn').addEventListener('click', () => {
     updateDlEstimate();
     switchDlTab('dl-pane-download');
@@ -1193,7 +1193,7 @@
     updateDlEstimate();
   });
 
-  // ── About Modal ───────────────────────────────────────────
+  // -- About Modal -------------------------------------------
   $('about-btn').addEventListener('click', () => {
     // Populate the cache version from the active service worker's cache list
     if ('caches' in window) {
@@ -1209,14 +1209,14 @@
   });
   $('about-modal-close').addEventListener('click', () => $('about-modal').classList.remove('open'));
 
-  // ── Close Modals on Backdrop Click ────────────────────────
+  // -- Close Modals on Backdrop Click ------------------------
   ['name-modal', 'history-modal', 'about-modal'].forEach(id => {
     $(id).addEventListener('click', function (e) {
       if (e.target === this) this.classList.remove('open');
     });
   });
 
-  // ── Device Orientation (compass fallback for heading) ────
+  // -- Device Orientation (compass fallback for heading) ----
   function startCompass() {
     // iOS 13+ requires a permission request for DeviceOrientationEvent
     if (typeof DeviceOrientationEvent !== 'undefined' &&
@@ -1263,7 +1263,7 @@
     $('val-heading').textContent = headingLabel(displayHeading);
   }
 
-  // ── Wake Lock ────────────────────────────────────────────
+  // -- Wake Lock --------------------------------------------
   async function acquireWakeLock() {
     console.log('Acquiring wake lock...');
     if (!('wakeLock' in navigator)) return;   // API not supported
@@ -1303,7 +1303,7 @@
     }
   });
 
-  // ── Boot ──────────────────────────────────────────────────
+  // -- Boot --------------------------------------------------
   startClock();
   startGPS();
   startCompass();
